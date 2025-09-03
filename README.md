@@ -8,8 +8,8 @@ MIT License, Copyright (c) 2025 PageChen04.
 
 前往 [Releases](https://github.com/PageChen04/hitsz-srun-login/releases) 下载最新版。（[下载哪个文件？](https://github.com/MetaCubeX/mihomo/wiki/FAQ)）
 
-```bash
-./hitsz-srun-login -username <username> -password <password>
+```console
+./hitsz-srun-login -username <username> -password <password> [-bind <bind_ip>]
 ```
 
 参数替换成对应 HIT SSO 的登录账号和密码。
@@ -29,7 +29,7 @@ MIT License, Copyright (c) 2025 PageChen04.
 
 - [ ] 登出功能
 - [ ] 储存 Cookie 以减少登录次数
-- [ ] 支持选择网卡或出口 IP
+- [X] 支持选择网卡或出口 IP
 - [ ] 支持传统登录方式
 - [ ] 支持 Captcha
 - [ ] 更好的错误提示

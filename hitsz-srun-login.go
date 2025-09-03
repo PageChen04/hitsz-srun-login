@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -12,6 +11,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -21,9 +21,10 @@ import (
 )
 
 func main() {
-	var username, password string
+	var username, password, bind string
 	flag.StringVar(&username, "username", "", "Username to login HIT SSO with")
 	flag.StringVar(&password, "password", "", "Password to login HIT SSO with")
+	flag.StringVar(&bind, "bind", "", "IP to bind to")
 	flag.Parse()
 
 	if username == "" || password == "" {
@@ -31,8 +32,10 @@ func main() {
 		return
 	}
 
+	client := newHttpClient(bind)
+
 	const srunServiceURL = "http://10.248.98.2/srun_portal_sso"
-	callbackURL, err := authenticate(srunServiceURL, username, password)
+	callbackURL, err := authenticate(srunServiceURL, username, password, client)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,29 +47,40 @@ func main() {
 	}
 	fmt.Println("Ticket: " + ticket)
 
-	result, err := netLogin(ticket)
+	result, err := netLogin(ticket, client)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Login Result: " + result)
 }
 
-func authenticate(service, username, password string) (string, error) {
+func newHttpClient(bindIP string) *http.Client {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	client := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if strings.HasPrefix(req.URL.String(), service) {
-				return http.ErrUseLastResponse
-			} else {
-				return nil
-			}
-		},
+	var transport *http.Transport = nil
+	if bindIP != "" {
+		dialer := &net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(bindIP)}}
+		transport = &http.Transport{DialContext: dialer.DialContext}
 	}
+	client := &http.Client{
+		Jar:       jar,
+		Transport: transport,
+	}
+	return client
+}
 
+func authenticate(service, username, password string, client *http.Client) (string, error) {
+	prevCheckRedirect := client.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if strings.HasPrefix(req.URL.String(), service) {
+			return http.ErrUseLastResponse
+		} else {
+			return nil
+		}
+	}
+	defer func() { client.CheckRedirect = prevCheckRedirect }()
 	// 1) GET 登录页
 	loginURL := "https://ids.hit.edu.cn/authserver/login?service=" + url.QueryEscape(service)
 	resp, err := client.Get(loginURL)
@@ -75,13 +89,8 @@ func authenticate(service, username, password string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	htmlBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read login page: %w", err)
-	}
-
 	// 2) 解析隐藏字段（form#pwdFromId input[type=hidden]）
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(htmlBytes))
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("parse document: %w", err)
 	}
@@ -115,7 +124,7 @@ func authenticate(service, username, password string) (string, error) {
 	}
 	encPwd, err := aesEncryptPassword(password, pwdSalt)
 	if err != nil {
-		return "", fmt.Errorf("encrypt password: %w", err)
+		return "", fmt.Errorf("fail to encrypt password: %w", err)
 	}
 	formData["password"] = encPwd
 
@@ -141,15 +150,15 @@ func authenticate(service, username, password string) (string, error) {
 	}
 
 	// 正常情况下应该是重定向
-	finalURL, err := postResp.Location()
+	callbackURL, err := postResp.Location()
 	if err != nil {
 		return "", fmt.Errorf("POST location not found")
 	}
-	finalURLStr := finalURL.String()
-	if !strings.HasPrefix(finalURLStr, service) {
-		return "", fmt.Errorf("authentication failed, return url is %s", finalURL)
+	callbackURLStr := callbackURL.String()
+	if !strings.HasPrefix(callbackURLStr, service) {
+		return "", fmt.Errorf("authentication failed, return url is %s", callbackURL)
 	}
-	return finalURLStr, nil
+	return callbackURLStr, nil
 }
 
 func parseTicket(service, urlStr string) (string, error) {
@@ -160,9 +169,9 @@ func parseTicket(service, urlStr string) (string, error) {
 	return strings.TrimPrefix(urlStr, service), nil
 }
 
-func netLogin(ticket string) (string, error) {
+func netLogin(ticket string, client *http.Client) (string, error) {
 	srunLoginURL := "https://net.hitsz.edu.cn/v1/srun_portal_sso?ticket=" + ticket
-	resp, err := http.Get(srunLoginURL)
+	resp, err := client.Get(srunLoginURL)
 	if err != nil {
 		return "", fmt.Errorf("GET srun login: %w", err)
 	}
@@ -177,7 +186,6 @@ func netLogin(ticket string) (string, error) {
 }
 
 func aesEncryptPassword(password, salt string) (string, error) {
-	// if salt is empty, return plain password
 	if len(salt) == 0 {
 		return password, nil
 	}
@@ -214,9 +222,8 @@ func aesEncryptPassword(password, salt string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-const aesChars = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
-
 func randomString(n int) (string, error) {
+	const aesChars = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
 	b := make([]byte, n)
 	for i := 0; i < n; i++ {
 		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(aesChars))))

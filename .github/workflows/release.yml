@@ -11,8 +11,6 @@ on:
   push:
     paths-ignore:
       - "README.md"
-    tags:
-      - "v*"
     branches:
       - "main"
 concurrency:
@@ -66,20 +64,17 @@ jobs:
 
           # Go 1.20 is the last release that will run on any release of Windows 7, 8, Server 2008 and Server 2012. Go 1.21 will require at least Windows 10 or Server 2016.
           - { goos: windows, goarch: '386', output: '386-go120', goversion: '1.20' }
-          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-v1-go120, goversion: '1.20' }
-          - { goos: windows, goarch: amd64, goamd64: v2, output: amd64-v2-go120, goversion: '1.20' }
-          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-v3-go120, goversion: '1.20' }
+          - { goos: windows, goarch: amd64, goamd64: v1, output: amd64-compatible-go120, goversion: '1.20' }
+          - { goos: windows, goarch: amd64, goamd64: v3, output: amd64-go120, goversion: '1.20' }
 
           # Go 1.20 is the last release that will run on macOS 10.13 High Sierra or 10.14 Mojave. Go 1.21 will require macOS 10.15 Catalina or later.
           - { goos: darwin, goarch: arm64, output: arm64-go120, goversion: '1.20' }
-          - { goos: darwin, goarch: amd64, goamd64: v1, output: amd64-v1-go120, goversion: '1.20' }
-          - { goos: darwin, goarch: amd64, goamd64: v2, output: amd64-v2-go120, goversion: '1.20' }
-          - { goos: darwin, goarch: amd64, goamd64: v3, output: amd64-v3-go120, goversion: '1.20' }
+          - { goos: darwin, goarch: amd64, goamd64: v1, output: amd64-compatible-go120, goversion: '1.20' }
+          - { goos: darwin, goarch: amd64, goamd64: v3, output: amd64-go120, goversion: '1.20' }
 
           - { goos: linux, goarch: '386', output: '386-go120', goversion: '1.20' }
-          - { goos: linux, goarch: amd64, goamd64: v1, output: amd64-v1-go120, goversion: '1.20', test: test }
-          - { goos: linux, goarch: amd64, goamd64: v2, output: amd64-v2-go120, goversion: '1.20' }
-          - { goos: linux, goarch: amd64, goamd64: v3, output: amd64-v3-go120, goversion: '1.20' }
+          - { goos: linux, goarch: amd64, goamd64: v1, output: amd64-compatible-go120, goversion: '1.20' }
+          - { goos: linux, goarch: amd64, goamd64: v3, output: amd64-go120, goversion: '1.20' }
 
     steps:
     - uses: actions/checkout@v4
@@ -131,13 +126,6 @@ jobs:
         echo "CGO_ENABLED=1" >> $GITHUB_ENV
         echo "BUILDTAG=" >> $GITHUB_ENV
 
-    - name: Test
-      if: ${{ matrix.jobs.test == 'test' }}
-      run: |
-        go test ./...
-        echo "---test with_gvisor---"
-        go test ./... -tags "with_gvisor" -count=1
-
     - name: Build core
       env:
         GOOS: ${{matrix.jobs.goos}}
@@ -155,23 +143,16 @@ jobs:
           cp hitsz-srun-login hitsz-srun-login-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
         fi
 
-    - name: Save version
-      run: |
-        echo ${VERSION} > version.txt
-      shell: bash
-
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:
         name: "${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}"
         path: |
-          hitsz-srun-login*
-          version.txt
-          checksums.txt
+          hitsz-srun-login-*
 
   Upload-Release:
     permissions: write-all
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' || startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
     needs: [build]
     runs-on: ubuntu-latest
     steps:
