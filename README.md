@@ -1,8 +1,8 @@
 # HITSZ Srun Login
 
-MIT License, Copyright (c) 2025 PageChen04
+MIT License, Copyright (c) 2025 PageChen04.
 
-更适合哈工深宝宝体质的深澜登录工具。现已支持 HIT SSO 登录。
+更适合哈工深宝宝体质的深澜校园网登录工具。现已支持 HIT SSO 登录。
 
 ## 使用方法
 
@@ -12,7 +12,7 @@ MIT License, Copyright (c) 2025 PageChen04
 ./hitsz-srun-login -username <username> -password <password>
 ```
 
-对应 HIT SSO 的登录账号和密码。
+参数替换成对应 HIT SSO 的登录账号和密码。
 
 ## 可能的报错
 
@@ -20,9 +20,10 @@ MIT License, Copyright (c) 2025 PageChen04
   - 账号密码错误
   - 需要滑动验证，可以在他处（例如[这里](https://ids.hit.edu.cn/authserver/login)）人工登录后再进行尝试
   - 账号风控（**已知登录累计并行会话数>10或IP数≥10，将被冻结**）
-- `Login Result: {"code":1,"message":"","user_name":"","data":[]}
+- `Login Result: {"code":1,"message":"","user_name":"","data":[]}`
   - 该 IP 已登录
   - 账号套餐异常
+  - 其他奇怪的深澜内部问题
 
 ## TODO
 
@@ -32,6 +33,7 @@ MIT License, Copyright (c) 2025 PageChen04
 - [ ] 支持传统登录方式
 - [ ] 支持 Captcha
 - [ ] 更好的错误提示
+- [ ] 更多校园网信息提示
 
 ## 致谢
 
