@@ -246,13 +246,10 @@ jobs:
       run: |
         VERSION="${GITHUB_REF_NAME,,}-$(git rev-parse --short HEAD)"
         VERSION="${VERSION//\//-}"
-        PackageVersion="$(curl -s "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" | jq -r '.tag_name' | sed 's/v//g' | awk -F '.' '{$NF = $NF + 1; print}' OFS='.').${VERSION/-/.}"
         if [ -n "${{ github.event.inputs.version }}" ]; then
           VERSION=${{ github.event.inputs.version }}
-          PackageVersion="${VERSION#v}"
         fi
         echo "VERSION=${VERSION}" >> $GITHUB_ENV
-        echo "PackageVersion=${PackageVersion}" >> $GITHUB_ENV
       
         echo "BUILDTIME=$(date)" >> $GITHUB_ENV
         echo "CGO_ENABLED=0" >> $GITHUB_ENV
@@ -280,12 +277,6 @@ jobs:
         echo "---test with_gvisor---"
         go test ./... -tags "with_gvisor" -count=1
 
-    - name: Update CA
-      run: |
-        sudo apt-get update && sudo apt-get install ca-certificates
-        sudo update-ca-certificates
-        cp -f /etc/ssl/certs/ca-certificates.crt component/ca/ca-certificates.crt
-
     - name: Build core
       env:
         GOOS: ${{matrix.jobs.goos}}
@@ -296,14 +287,11 @@ jobs:
         GOMIPS: ${{matrix.jobs.gomips}}
       run: |
         go env
-        go build -v -tags "with_gvisor" -trimpath -ldflags "${BUILDTAG} -X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=${BUILDTIME}' -w -s -buildid="
+        go build -v -tags "with_gvisor" -trimpath -ldflags "${BUILDTAG} -w -s -buildid="
         if [ "${{matrix.jobs.goos}}" = "windows" ]; then
-          cp mihomo.exe mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
-          zip -r mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.zip mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
+          cp hitsz-srun-login.exe hitsz-srun-login-${{matrix.jobs.goos}}-${{matrix.jobs.output}}.exe
         else
-          cp mihomo mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
-          gzip -c mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}} > mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}-${VERSION}.gz
-          rm mihomo-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
+          cp hitsz-srun-login hitsz-srun-login-${{matrix.jobs.goos}}-${{matrix.jobs.output}}
         fi
 
     - name: Save version
@@ -316,11 +304,7 @@ jobs:
       with:
         name: "${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}"
         path: |
-          mihomo*.gz
-          mihomo*.deb
-          mihomo*.rpm
-          mihomo*.pkg.tar.zst
-          mihomo*.zip
+          hitsz-srun-login*
           version.txt
           checksums.txt
 
@@ -330,19 +314,6 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: Meta
-          fetch-depth: '0'
-          fetch-tags: 'true'
-
-      - name: Get tags
-        run: |
-          echo "CURRENTVERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          git fetch --tags
-          echo "PREVERSION=$(git describe --tags --abbrev=0 HEAD)" >> $GITHUB_ENV
-  
       - uses: actions/download-artifact@v4
         with:
           path: bin/
