@@ -48,7 +48,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Login result: " + result)
+	fmt.Println("Login Result: " + result)
 }
 
 func authenticate(service, username, password string) (string, error) {
@@ -102,7 +102,6 @@ func authenticate(service, username, password string) (string, error) {
 			}
 			return
 		}
-		// Rust 代码里也兼容只给了 id 的情况
 		if id, ok := sel.Attr("id"); ok && id == "pwdEncryptSalt" {
 			if v, ok := sel.Attr("value"); ok {
 				pwdSalt = v
@@ -178,7 +177,7 @@ func netLogin(ticket string) (string, error) {
 }
 
 func aesEncryptPassword(password, salt string) (string, error) {
-	// if salt is empty, return plain password (与 Rust 一致)
+	// if salt is empty, return plain password
 	if len(salt) == 0 {
 		return password, nil
 	}

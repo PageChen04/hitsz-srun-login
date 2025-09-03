@@ -1,3 +1,6 @@
+# This file is modified from https://github.com/MetaCubeX/mihomo/blob/Meta/.github/workflows/build.yml
+# License: GPL-3.0
+
 name: Build
 on:
   workflow_dispatch:
