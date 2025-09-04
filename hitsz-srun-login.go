@@ -59,14 +59,13 @@ func newHttpClient(bindIP string) *http.Client {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var transport *http.Transport = nil
+	client := &http.Client{
+		Jar: jar,
+	}
 	if bindIP != "" {
 		dialer := &net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(bindIP)}}
-		transport = &http.Transport{DialContext: dialer.DialContext}
-	}
-	client := &http.Client{
-		Jar:       jar,
-		Transport: transport,
+		transport := &http.Transport{DialContext: dialer.DialContext}
+		client.Transport = transport
 	}
 	return client
 }
