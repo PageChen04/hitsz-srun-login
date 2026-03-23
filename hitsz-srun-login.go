@@ -20,7 +20,7 @@ import (
 
 func main() {
 	var username, password, bind, sessionFile, mfaMethod, mfaCode, otpSecret string
-	var dryRun, noSession, nonInteractive bool
+	var dryRun, noSession, nonInteractive, noRememberSSO, noRememberMFA bool
 	input := bufio.NewReader(os.Stdin)
 	flag.StringVar(&username, "username", "", "Username to login HIT SSO with")
 	flag.StringVar(&password, "password", "", "Password to login HIT SSO with")
@@ -29,24 +29,12 @@ func main() {
 	flag.StringVar(&sessionFile, "session-file", defaultSessionFile(), "Path to persisted session cookies")
 	flag.BoolVar(&noSession, "no-session", false, "Disable loading and saving persisted session cookies")
 	flag.BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
+	flag.BoolVar(&noRememberSSO, "no-remember-sso", false, "Disable SSO rememberMe")
+	flag.BoolVar(&noRememberMFA, "no-remember-mfa", false, "Disable MFA skipTmpReAuth")
 	flag.StringVar(&mfaMethod, "mfa-method", "", "Preferred MFA method: sms, app, email, otp")
 	flag.StringVar(&mfaCode, "mfa-code", "", "MFA verification code or OTP; if empty, prompt interactively when needed")
 	flag.StringVar(&otpSecret, "otp-secret", "", "TOTP secret used to generate OTP locally when -mfa-method otp and -mfa-code is empty")
 	flag.Parse()
-
-	var err error
-	if username == "" {
-		username, err = promptInput(input, os.Stdout, "username: ", "username", nonInteractive)
-		if err != nil {
-			log.Fatal("Failed to read username: ", err)
-		}
-	}
-	if password == "" {
-		password, err = promptInput(input, os.Stdout, "password: ", "password", nonInteractive)
-		if err != nil {
-			log.Fatal("Failed to read password: ", err)
-		}
-	}
 
 	if noSession {
 		sessionFile = ""
@@ -55,23 +43,40 @@ func main() {
 	}
 
 	client, jar := newHttpClient(bind, sessionFile)
-	defer func() {
-		if err := jar.Save(); err != nil {
-			log.Printf("Save session: %v", err)
-		}
-	}()
 
-	callbackURL, err := authenticate(srunServiceURL, username, password, client, authOptions{
-		MFAMethod:      mfaMethod,
-		MFACode:        mfaCode,
-		OTPSecret:      otpSecret,
-		NonInteractive: nonInteractive,
-		Stdin:          input,
-		Stdout:         os.Stdout,
-	})
+	callbackURL, reused, err := tryExistingSession(srunServiceURL, client)
 	if err != nil {
-		log.Fatal("Failed to authenticate: ", err)
+		log.Fatal("Failed to check existing session: ", err)
 	}
+	if !reused {
+		if username == "" {
+			username, err = promptInput(input, os.Stdout, "username: ", "username", nonInteractive)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if password == "" {
+			password, err = promptInput(input, os.Stdout, "password: ", "password", nonInteractive)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		callbackURL, err = authenticateWithCredentials(srunServiceURL, username, password, client, authOptions{
+			MFAMethod:      mfaMethod,
+			MFACode:        mfaCode,
+			OTPSecret:      otpSecret,
+			RememberMe:     !noRememberSSO,
+			SkipTmpReAuth:  !noRememberMFA,
+			NonInteractive: nonInteractive,
+			Stdin:          input,
+			Stdout:         os.Stdout,
+		})
+		if err != nil {
+			log.Fatal("Failed to authenticate: ", err)
+		}
+	}
+
 	log.Print("SSO Authenticated.")
 
 	ticket, err := parseTicket(srunServiceURL, callbackURL)
@@ -80,6 +85,9 @@ func main() {
 	}
 	log.Printf("Ticket: %s", ticket)
 	if dryRun {
+		if err := jar.Save(); err != nil {
+			log.Printf("Save session: %v", err)
+		}
 		log.Print("Dry run enabled, skip final campus network login.")
 		return
 	}
@@ -87,6 +95,9 @@ func main() {
 	result, err := netLogin(ticket, client)
 	if err != nil {
 		log.Fatal("Failed to login to campus network: ", err)
+	}
+	if err := jar.Save(); err != nil {
+		log.Printf("Save session: %v", err)
 	}
 	log.Printf("Login Result: %s", result)
 }

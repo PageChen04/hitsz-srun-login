@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -17,12 +18,59 @@ type authOptions struct {
 	MFAMethod      string
 	MFACode        string
 	OTPSecret      string
+	RememberMe     bool
+	SkipTmpReAuth  bool
 	NonInteractive bool
 	Stdin          io.Reader
 	Stdout         io.Writer
 }
 
 func authenticate(service, username, password string, client *http.Client, opts authOptions) (string, error) {
+	callbackURL, reused, err := tryExistingSession(service, client)
+	if err != nil {
+		return "", err
+	}
+	if reused {
+		return callbackURL, nil
+	}
+	return authenticateWithCredentials(service, username, password, client, opts)
+}
+
+func tryExistingSession(service string, client *http.Client) (string, bool, error) {
+	prevCheckRedirect := client.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if strings.HasPrefix(req.URL.String(), service) || isMFAURL(req.URL.String()) {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}
+	defer func() { client.CheckRedirect = prevCheckRedirect }()
+
+	loginURL := "https://ids.hit.edu.cn/authserver/login?service=" + url.QueryEscape(service)
+	resp, err := client.Get(loginURL)
+	if err != nil {
+		return "", false, fmt.Errorf("GET login: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusFound {
+		callbackURL, err := resp.Location()
+		if err != nil {
+			return "", false, fmt.Errorf("GET location not found")
+		}
+		callbackURLStr := callbackURL.String()
+		if strings.HasPrefix(callbackURLStr, service) {
+			return callbackURLStr, true, nil
+		}
+		return "", false, fmt.Errorf("unexpected redirect target: %s", callbackURLStr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", false, fmt.Errorf("unexpected login page status: %s", resp.Status)
+	}
+	return "", false, nil
+}
+
+func authenticateWithCredentials(service, username, password string, client *http.Client, opts authOptions) (string, error) {
 	prevCheckRedirect := client.CheckRedirect
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if strings.HasPrefix(req.URL.String(), service) || isMFAURL(req.URL.String()) {
@@ -39,17 +87,6 @@ func authenticate(service, username, password string, client *http.Client, opts 
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusFound {
-		callbackURL, err := resp.Location()
-		if err != nil {
-			return "", fmt.Errorf("GET location not found")
-		}
-		callbackURLStr := callbackURL.String()
-		if strings.HasPrefix(callbackURLStr, service) {
-			return callbackURLStr, nil
-		}
-		return "", fmt.Errorf("unexpected redirect target: %s", callbackURLStr)
-	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected login page status: %s", resp.Status)
 	}
@@ -91,7 +128,7 @@ func authenticate(service, username, password string, client *http.Client, opts 
 	}
 	formData["password"] = encPwd
 	formData["captcha"] = ""
-	formData["rememberMe"] = "true"
+	formData["rememberMe"] = strconv.FormatBool(opts.RememberMe)
 
 	values := url.Values{}
 	for k, v := range formData {

@@ -76,7 +76,7 @@ func completeMFA(client *http.Client, ctx mfaContext, username, pageBody string,
 	if err != nil {
 		return "", err
 	}
-	if err := submitMFACode(client, ctx, code, method); err != nil {
+	if err := submitMFACode(client, ctx, code, method, opts); err != nil {
 		return "", err
 	}
 	return finalizeMFALogin(client, ctx)
@@ -327,7 +327,7 @@ func resolveMFACode(method mfaMethod, opts authOptions) (string, error) {
 	}
 }
 
-func submitMFACode(client *http.Client, ctx mfaContext, code string, method mfaMethod) error {
+func submitMFACode(client *http.Client, ctx mfaContext, code string, method mfaMethod, opts authOptions) error {
 	if strings.TrimSpace(code) == "" {
 		return errors.New("empty mfa code")
 	}
@@ -341,7 +341,7 @@ func submitMFACode(client *http.Client, ctx mfaContext, code string, method mfaM
 		"answer1":       {""},
 		"answer2":       {""},
 		"otpCode":       {""},
-		"skipTmpReAuth": {"true"},
+		"skipTmpReAuth": {strconv.FormatBool(opts.SkipTmpReAuth)},
 	}
 	if method.NeedsDynamicCode {
 		values.Set("dynamicCode", strings.TrimSpace(code))
