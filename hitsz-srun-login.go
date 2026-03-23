@@ -13,7 +13,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"strings"
 
@@ -21,47 +20,67 @@ import (
 )
 
 func main() {
-	var username, password, bind string
-	var dryRun bool
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	var username, password, bind, sessionFile string
+	var dryRun, noSession bool
 	flag.StringVar(&username, "username", "", "Username to login HIT SSO with")
 	flag.StringVar(&password, "password", "", "Password to login HIT SSO with")
 	flag.StringVar(&bind, "bind", "", "IP to bind to")
 	flag.BoolVar(&dryRun, "dry-run", false, "Only login HIT SSO without final campus network login")
+	flag.StringVar(&sessionFile, "session-file", defaultSessionFile(), "Path to persisted session cookies")
+	flag.BoolVar(&noSession, "no-session", false, "Disable loading and saving persisted session cookies")
 	flag.Parse()
 
 	if username == "" || password == "" {
 		flag.Usage()
-		return
+		return nil
 	}
 
-	client := newHttpClient(bind)
+	if noSession {
+		sessionFile = ""
+	} else {
+		log.Printf("session file: %s", sessionFile)
+	}
+
+	client, jar := newHttpClient(bind, sessionFile)
+	defer func() {
+		if err := jar.Save(); err != nil {
+			log.Printf("save session: %v", err)
+		}
+	}()
 
 	const srunServiceURL = "http://10.248.98.2/srun_portal_sso"
 	callbackURL, err := authenticate(srunServiceURL, username, password, client)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	fmt.Println("SSO Authenticated.")
 
 	ticket, err := parseTicket(srunServiceURL, callbackURL)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	fmt.Println("Ticket: " + ticket)
 	if dryRun {
 		fmt.Println("Dry run enabled, skip final campus network login.")
-		return
+		return nil
 	}
 
 	result, err := netLogin(ticket, client)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	fmt.Println("Login Result: " + result)
+	return nil
 }
 
-func newHttpClient(bindIP string) *http.Client {
-	jar, err := cookiejar.New(nil)
+func newHttpClient(bindIP, sessionFile string) (*http.Client, *persistentCookieJar) {
+	jar, err := newPersistentCookieJar(sessionFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,7 +92,7 @@ func newHttpClient(bindIP string) *http.Client {
 		transport := &http.Transport{DialContext: dialer.DialContext}
 		client.Transport = transport
 	}
-	return client
+	return client, jar
 }
 
 func authenticate(service, username, password string, client *http.Client) (string, error) {
@@ -93,6 +112,21 @@ func authenticate(service, username, password string, client *http.Client) (stri
 		return "", fmt.Errorf("GET login: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusFound {
+		callbackURL, err := resp.Location()
+		if err != nil {
+			return "", fmt.Errorf("GET location not found")
+		}
+		callbackURLStr := callbackURL.String()
+		if strings.HasPrefix(callbackURLStr, service) {
+			return callbackURLStr, nil
+		}
+		return "", fmt.Errorf("unexpected redirect target: %s", callbackURLStr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected login page status: %s", resp.Status)
+	}
 
 	// 2) 解析隐藏字段（form#pwdFromId input[type=hidden]）
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
