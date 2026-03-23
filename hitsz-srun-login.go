@@ -22,9 +22,11 @@ import (
 
 func main() {
 	var username, password, bind string
+	var dryRun bool
 	flag.StringVar(&username, "username", "", "Username to login HIT SSO with")
 	flag.StringVar(&password, "password", "", "Password to login HIT SSO with")
 	flag.StringVar(&bind, "bind", "", "IP to bind to")
+	flag.BoolVar(&dryRun, "dry-run", false, "Only login HIT SSO without final campus network login")
 	flag.Parse()
 
 	if username == "" || password == "" {
@@ -46,6 +48,10 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Ticket: " + ticket)
+	if dryRun {
+		fmt.Println("Dry run enabled, skip final campus network login.")
+		return
+	}
 
 	result, err := netLogin(ticket, client)
 	if err != nil {

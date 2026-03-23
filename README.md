@@ -1,6 +1,6 @@
 # HITSZ Srun Login
 
-MIT License, Copyright (c) 2025 PageChen04.
+MIT License, Copyright (c) 2026 PageChen04.
 
 更适合哈工深宝宝体质的深澜校园网登录工具。现已支持 HIT SSO 登录。
 
@@ -9,7 +9,7 @@ MIT License, Copyright (c) 2025 PageChen04.
 前往 [Releases](https://github.com/PageChen04/hitsz-srun-login/releases) 下载最新版。（[下载哪个文件？](https://github.com/MetaCubeX/mihomo/wiki/FAQ)）
 
 ```console
-./hitsz-srun-login -username <username> -password <password> [-bind <bind_ip>]
+./hitsz-srun-login -username <username> -password <password> [-bind <bind_ip>] [-dry-run]
 ```
 
 参数替换成对应 HIT SSO 的登录账号和密码。
