@@ -19,13 +19,7 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func run() error {
-	var username, password, bind, sessionFile, mfaMethod, mfaCode string
+	var username, password, bind, sessionFile, mfaMethod, mfaCode, otpSecret string
 	var dryRun, noSession, nonInteractive bool
 	input := bufio.NewReader(os.Stdin)
 	flag.StringVar(&username, "username", "", "Username to login HIT SSO with")
@@ -37,19 +31,20 @@ func run() error {
 	flag.BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
 	flag.StringVar(&mfaMethod, "mfa-method", "", "Preferred MFA method: sms, app, email, otp")
 	flag.StringVar(&mfaCode, "mfa-code", "", "MFA verification code or OTP; if empty, prompt interactively when needed")
+	flag.StringVar(&otpSecret, "otp-secret", "", "TOTP secret used to generate OTP locally when -mfa-method otp and -mfa-code is empty")
 	flag.Parse()
 
 	var err error
 	if username == "" {
 		username, err = promptInput(input, os.Stdout, "username: ", "username", nonInteractive)
 		if err != nil {
-			return err
+			log.Fatal("Failed to read username: ", err)
 		}
 	}
 	if password == "" {
 		password, err = promptInput(input, os.Stdout, "password: ", "password", nonInteractive)
 		if err != nil {
-			return err
+			log.Fatal("Failed to read password: ", err)
 		}
 	}
 
@@ -69,31 +64,31 @@ func run() error {
 	callbackURL, err := authenticate(srunServiceURL, username, password, client, authOptions{
 		MFAMethod:      mfaMethod,
 		MFACode:        mfaCode,
+		OTPSecret:      otpSecret,
 		NonInteractive: nonInteractive,
 		Stdin:          input,
 		Stdout:         os.Stdout,
 	})
 	if err != nil {
-		return err
+		log.Fatal("Failed to authenticate: ", err)
 	}
 	log.Print("SSO Authenticated.")
 
 	ticket, err := parseTicket(srunServiceURL, callbackURL)
 	if err != nil {
-		return err
+		log.Fatal("Failed to parse ticket: ", err)
 	}
 	log.Printf("Ticket: %s", ticket)
 	if dryRun {
 		log.Print("Dry run enabled, skip final campus network login.")
-		return nil
+		return
 	}
 
 	result, err := netLogin(ticket, client)
 	if err != nil {
-		return err
+		log.Fatal("Failed to login to campus network: ", err)
 	}
 	log.Printf("Login Result: %s", result)
-	return nil
 }
 
 func promptInput(stdin *bufio.Reader, stdout io.Writer, prompt, field string, nonInteractive bool) (string, error) {

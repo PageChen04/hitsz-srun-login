@@ -288,6 +288,16 @@ func resolveMFACode(method mfaMethod, opts authOptions) (string, error) {
 	if code := strings.TrimSpace(opts.MFACode); code != "" {
 		return code, nil
 	}
+	if !method.NeedsDynamicCode {
+		if secret := strings.TrimSpace(opts.OTPSecret); secret != "" {
+			code, err := generateTOTP(secret)
+			if err != nil {
+				return "", err
+			}
+			log.Print("OTP Code: ", code)
+			return code, nil
+		}
+	}
 	if opts.NonInteractive {
 		return "", errors.New("mfa code required in non-interactive mode")
 	}

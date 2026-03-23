@@ -16,6 +16,7 @@ const srunServiceURL = "http://10.248.98.2/srun_portal_sso"
 type authOptions struct {
 	MFAMethod      string
 	MFACode        string
+	OTPSecret      string
 	NonInteractive bool
 	Stdin          io.Reader
 	Stdout         io.Writer
