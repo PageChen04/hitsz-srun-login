@@ -19,22 +19,57 @@ import (
 )
 
 func main() {
+	flag.Usage = usage
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) == 0 {
+		usage()
+		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "login":
+		runLogin(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %q\n\n", args[0])
+		usage()
+		os.Exit(1)
+	}
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s <subcommand> [options]\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Subcommands:\n")
+	fmt.Fprintf(os.Stderr, "  login    Authenticate via HIT SSO and log in to the campus network\n")
+}
+
+func runLogin(args []string) {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s login [options]\n\nOptions:\n", os.Args[0])
+		fs.PrintDefaults()
+	}
+
 	var username, password, bind, sessionFile, mfaMethod, mfaCode, otpSecret string
 	var dryRun, noSession, nonInteractive, noRememberSSO, noRememberMFA bool
+
+	fs.StringVar(&username, "username", "", "Username to login HIT SSO with")
+	fs.StringVar(&password, "password", "", "Password to login HIT SSO with")
+	fs.StringVar(&bind, "bind", "", "IP to bind to")
+	fs.BoolVar(&dryRun, "dry-run", false, "Only login HIT SSO without final campus network login")
+	fs.StringVar(&sessionFile, "session-file", defaultSessionFile(), "Path to persisted session cookies")
+	fs.BoolVar(&noSession, "no-session", false, "Disable loading and saving persisted session cookies")
+	fs.BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
+	fs.BoolVar(&noRememberSSO, "no-remember-sso", false, "Disable SSO rememberMe")
+	fs.BoolVar(&noRememberMFA, "no-remember-mfa", false, "Disable MFA skipTmpReAuth")
+	fs.StringVar(&mfaMethod, "mfa-method", "", "Preferred MFA method: sms, app, email, otp")
+	fs.StringVar(&mfaCode, "mfa-code", "", "MFA verification code or OTP; if empty, prompt interactively when needed")
+	fs.StringVar(&otpSecret, "otp-secret", "", "TOTP secret used to generate OTP locally when -mfa-method otp and -mfa-code is empty")
+
+	fs.Parse(args)
+
 	input := bufio.NewReader(os.Stdin)
-	flag.StringVar(&username, "username", "", "Username to login HIT SSO with")
-	flag.StringVar(&password, "password", "", "Password to login HIT SSO with")
-	flag.StringVar(&bind, "bind", "", "IP to bind to")
-	flag.BoolVar(&dryRun, "dry-run", false, "Only login HIT SSO without final campus network login")
-	flag.StringVar(&sessionFile, "session-file", defaultSessionFile(), "Path to persisted session cookies")
-	flag.BoolVar(&noSession, "no-session", false, "Disable loading and saving persisted session cookies")
-	flag.BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
-	flag.BoolVar(&noRememberSSO, "no-remember-sso", false, "Disable SSO rememberMe")
-	flag.BoolVar(&noRememberMFA, "no-remember-mfa", false, "Disable MFA skipTmpReAuth")
-	flag.StringVar(&mfaMethod, "mfa-method", "", "Preferred MFA method: sms, app, email, otp")
-	flag.StringVar(&mfaCode, "mfa-code", "", "MFA verification code or OTP; if empty, prompt interactively when needed")
-	flag.StringVar(&otpSecret, "otp-secret", "", "TOTP secret used to generate OTP locally when -mfa-method otp and -mfa-code is empty")
-	flag.Parse()
 
 	if noSession {
 		sessionFile = ""
