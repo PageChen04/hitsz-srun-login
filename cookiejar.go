@@ -148,5 +148,6 @@ func sessionCookieURLs() []string {
 	return []string{
 		"https://ids.hit.edu.cn/",
 		"https://net.hitsz.edu.cn/",
+		"https://net.hitsz.edu.cn:8800/",
 	}
 }
