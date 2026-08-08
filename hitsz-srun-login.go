@@ -31,6 +31,14 @@ func main() {
 	switch args[0] {
 	case "login":
 		runLogin(args[1:])
+	case "local-login":
+		runLocalLogin(args[1:])
+	case "logout":
+		runLogout(args[1:])
+	case "list-devices":
+		runListDevices(args[1:])
+	case "kick-device":
+		runKickDevice(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %q\n\n", args[0])
 		usage()
@@ -41,7 +49,11 @@ func main() {
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s <subcommand> [options]\n\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Subcommands:\n")
-	fmt.Fprintf(os.Stderr, "  login    Authenticate via HIT SSO and log in to the campus network\n")
+	fmt.Fprintf(os.Stderr, "  login          Authenticate via HIT SSO and log in to the campus network\n")
+	fmt.Fprintf(os.Stderr, "  local-login    Authenticate via srun local user and log in to the campus network\n")
+	fmt.Fprintf(os.Stderr, "  logout         Log out current machine from the campus network\n")
+	fmt.Fprintf(os.Stderr, "  list-devices   List all devices authenticated under the account\n")
+	fmt.Fprintf(os.Stderr, "  kick-device    Force a specific device offline\n")
 }
 
 func runLogin(args []string) {
