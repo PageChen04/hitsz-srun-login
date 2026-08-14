@@ -54,7 +54,7 @@ func runLocalLogin(args []string) {
 		}
 	}
 
-	client, jar := newHttpClient("", sessionFile)
+	client, jar := newHttpClient("", sessionFile, true)
 
 	result, err := srunLocalLogin(username, password, ip, client)
 	if err != nil {
@@ -98,7 +98,7 @@ func runLogout(args []string) {
 	}
 
 	// Resolve missing username/ip from rad_user_info if possible.
-	client, jar := newHttpClient("", sessionFile)
+	client, jar := newHttpClient("", sessionFile, true)
 
 	if ip == "" || username == "" {
 		log.Printf("Querying current online status to fill missing username/ip...")
@@ -162,7 +162,7 @@ func runListDevices(args []string) {
 		log.Printf("Session file: %s", sessionFile)
 	}
 
-	client, jar := newHttpClient("", sessionFile)
+	client, jar := newHttpClient("", sessionFile, true)
 
 	// Ensure portal session (reuse → SSO jump → credentials).
 	if _, err := ensurePortalSession(username, password, captcha, sessionFile, nonInteractive, client, jar); err != nil {
@@ -225,7 +225,7 @@ func runKickDevice(args []string) {
 		log.Printf("Session file: %s", sessionFile)
 	}
 
-	client, jar := newHttpClient("", sessionFile)
+	client, jar := newHttpClient("", sessionFile, true)
 
 	// Ensure portal session, get CSRF.
 	csrfToken, err := ensurePortalSession(username, password, captcha, sessionFile, nonInteractive, client, jar)

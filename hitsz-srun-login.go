@@ -63,8 +63,8 @@ func runLogin(args []string) {
 		fs.PrintDefaults()
 	}
 
-	var username, password, bind, sessionFile, mfaMethod, mfaCode, otpSecret string
-	var dryRun, noSession, nonInteractive, noRememberSSO, noRememberMFA bool
+	var username, password, bind, sessionFile, mfaMethod, mfaCode, otpSecret, mfaDeviceFile string
+	var dryRun, noSession, nonInteractive, noRememberSSO, noRememberMFA, rememberMFA bool
 
 	fs.StringVar(&username, "username", "", "Username to login HIT SSO with")
 	fs.StringVar(&password, "password", "", "Password to login HIT SSO with")
@@ -74,12 +74,15 @@ func runLogin(args []string) {
 	fs.BoolVar(&noSession, "no-session", false, "Disable loading and saving persisted session cookies")
 	fs.BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
 	fs.BoolVar(&noRememberSSO, "no-remember-sso", false, "Disable SSO rememberMe")
-	fs.BoolVar(&noRememberMFA, "no-remember-mfa", false, "Disable MFA skipTmpReAuth")
+	fs.BoolVar(&rememberMFA, "remember-mfa", false, "Register this CLI as a trusted MFA device")
+	fs.BoolVar(&noRememberMFA, "no-remember-mfa", false, "Do not register a trusted MFA device (overrides -remember-mfa)")
+	fs.StringVar(&mfaDeviceFile, "mfa-device-file", defaultMFADeviceFile(), "Path to the trusted MFA device credential")
 	fs.StringVar(&mfaMethod, "mfa-method", "", "Preferred MFA method: sms, app, email, otp")
 	fs.StringVar(&mfaCode, "mfa-code", "", "MFA verification code or OTP; if empty, prompt interactively when needed")
 	fs.StringVar(&otpSecret, "otp-secret", "", "TOTP secret used to generate OTP locally when -mfa-method otp and -mfa-code is empty")
 
 	fs.Parse(args)
+	rememberMFA = rememberMFA && !noRememberMFA
 
 	input := bufio.NewReader(os.Stdin)
 
@@ -89,11 +92,34 @@ func runLogin(args []string) {
 		log.Printf("Session file: %s", sessionFile)
 	}
 
-	client, jar := newHttpClient(bind, sessionFile)
+	loadSession := true
+	var mfaFingerprint string
+	if rememberMFA {
+		warnIfMFADeviceFileMayBeShared(mfaDeviceFile)
+		fingerprint, created, deviceErr := loadOrCreateMFABrowserFingerprint(mfaDeviceFile)
+		if deviceErr != nil {
+			log.Fatal("Failed to load MFA device credential: ", deviceErr)
+		}
+		mfaFingerprint = fingerprint
+		if created {
+			// An old SSO session is not associated with this new device. Keep the
+			// path so the newly authenticated session can still be saved.
+			loadSession = false
+			log.Printf("Created trusted MFA device credential: %s", mfaDeviceFile)
+		} else {
+			log.Printf("Using trusted MFA device credential: %s", mfaDeviceFile)
+		}
+	}
 
+	client, jar := newHttpClient(bind, sessionFile, loadSession)
 	callbackURL, reused, err := tryExistingSession(srunServiceURL, client)
 	if err != nil {
 		log.Fatal("Failed to check existing session: ", err)
+	}
+	if rememberMFA {
+		if err := registerMFABrowserFingerprint(client, srunServiceURL, mfaFingerprint); err != nil {
+			log.Fatal("Failed to register MFA device: ", err)
+		}
 	}
 	if !reused {
 		if username == "" {
@@ -114,7 +140,7 @@ func runLogin(args []string) {
 			MFACode:        mfaCode,
 			OTPSecret:      otpSecret,
 			RememberMe:     !noRememberSSO,
-			SkipTmpReAuth:  !noRememberMFA,
+			SkipTmpReAuth:  rememberMFA,
 			NonInteractive: nonInteractive,
 			Stdin:          input,
 			Stdout:         os.Stdout,
@@ -171,8 +197,8 @@ func promptInput(stdin *bufio.Reader, stdout io.Writer, prompt, field string, no
 	}
 }
 
-func newHttpClient(bindIP, sessionFile string) (*http.Client, *persistentCookieJar) {
-	jar, err := newPersistentCookieJar(sessionFile)
+func newHttpClient(bindIP, sessionFile string, loadSession bool) (*http.Client, *persistentCookieJar) {
+	jar, err := newPersistentCookieJar(sessionFile, loadSession)
 	if err != nil {
 		log.Fatal(err)
 	}
