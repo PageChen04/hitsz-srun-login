@@ -143,9 +143,16 @@ func parseMFATypeIDs(html string) ([]string, error) {
 	}
 	seen := make(map[string]struct{})
 	var ids []string
-	doc.Find(".changeReAuthTypes").Each(func(_ int, sel *goquery.Selection) {
-		id, ok := sel.Attr("id")
-		if !ok || id == "" {
+	// Older pages use .changeReAuthTypes[id]. Since the July 2026 page
+	// update, primary methods use .reauth-tab-item[data-type], while methods
+	// in the "More" menu keep their type in .reauth-tab-more-item[id].
+	doc.Find(".changeReAuthTypes, .reauth-tab-item, .reauth-tab-more-item").Each(func(_ int, sel *goquery.Selection) {
+		id, _ := sel.Attr("data-type")
+		if id == "" {
+			id, _ = sel.Attr("id")
+		}
+		id = strings.TrimSpace(strings.TrimPrefix(id, "tab_"))
+		if id == "" {
 			return
 		}
 		if _, exists := seen[id]; exists {

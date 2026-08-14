@@ -31,7 +31,7 @@ type persistedCookie struct {
 	SameSite   int       `json:"same_site,omitempty"`
 }
 
-func newPersistentCookieJar(path string) (*persistentCookieJar, error) {
+func newPersistentCookieJar(path string, load bool) (*persistentCookieJar, error) {
 	inner, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, err
@@ -40,8 +40,10 @@ func newPersistentCookieJar(path string) (*persistentCookieJar, error) {
 		inner: inner,
 		path:  path,
 	}
-	if err := jar.Load(); err != nil {
-		return nil, err
+	if load {
+		if err := jar.Load(); err != nil {
+			return nil, err
+		}
 	}
 	return jar, nil
 }

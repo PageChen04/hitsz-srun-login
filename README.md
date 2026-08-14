@@ -48,7 +48,9 @@ MIT License, Copyright (c) 2026 PageChen04.
 - `-otp-secret <secret>`: 当 `-mfa-method otp` 且未指定 `-mfa-code` 时，在本地生成当前 OTP。
 
 - `-no-remember-sso`: 关闭 SSO 的 `rememberMe`。
-- `-no-remember-mfa`: 关闭 MFA 的 `skipTmpReAuth`。
+- `-remember-mfa`: 将当前 CLI 登记为可信 MFA 设备。首次登录仍需完成 MFA，之后使用同一设备凭据登录时可跳过 MFA。
+- `-mfa-device-file <path>`: 指定可信 MFA 设备凭据文件。Windows 默认保存在当前设备的 LocalAppData 中；Linux 和 macOS 默认保存在用户配置目录中。
+- `-no-remember-mfa`: 不登记可信 MFA 设备；覆盖 `-remember-mfa`，并保留用于兼容旧命令。
 
 MFA 行为：
 
@@ -56,6 +58,14 @@ MFA 行为：
 - 对 `sms`、`app`、`email` 会先自动发送验证码，再提示输入；对 `otp` 会直接提示输入令牌。
 - 也可以通过 `-mfa-method` 和 `-mfa-code` 预先传入，避免交互。
 - 当 `-mfa-method otp` 且未指定 `-mfa-code` 时，如果传入 `-otp-secret`，程序会本地生成当前 OTP。
+
+可信设备登录：
+
+```console
+./hitsz-srun-login login -remember-mfa
+```
+
+首次运行会生成一个随机设备标识，调用 HIT 的浏览器指纹登记接口，并在 MFA 成功后将其绑定为可信设备。以后继续使用 `-remember-mfa` 和同一设备文件时，HIT SSO 可跳过 MFA。设备文件具有绕过 MFA 的能力，应像密码一样妥善保管，不要提交到 Git 或发送给他人；删除文件后，还应在 HIT 账号的可信设备列表中移除对应记录。Linux 和 macOS 会拒绝读取权限宽于 `0600` 的设备文件；Windows 默认路径依赖 LocalAppData 目录继承的 ACL，自定义路径时请确保仅当前用户可读。
 
 ### local-login —— 深澜本地账号登录
 
